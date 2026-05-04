@@ -57,9 +57,24 @@ jobs:
 
       - run: npm ci
 
+      - name: Restore cached SenseVoice models
+        uses: actions/cache/restore@v4
+        id: cache-models
+        with:
+          path: src-tauri/sensevoice
+          key: sensevoice-models-20260504
+
       - name: Download SenseVoice + VAD models
+        if: steps.cache-models.outputs.cache-hit != 'true'
         shell: bash
         run: bash scripts/download_models.sh
+
+      - name: Save SenseVoice models to cache
+        if: steps.cache-models.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: src-tauri/sensevoice
+          key: sensevoice-models-20260504
 
       - uses: tauri-apps/tauri-action@v0
         env:
