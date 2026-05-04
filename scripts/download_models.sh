@@ -25,12 +25,14 @@ download() {
     return 0
   fi
   echo "  ↓ Downloading: $(basename "$output")"
-  # Try hf-mirror first (China), fallback to huggingface.co
-  if curl -L --fail --retry 2 -o "$output" "https://hf-mirror.com/${url}"; then
+  # GitHub Actions runners are outside China; try huggingface.co first,
+  # then fallback to hf-mirror.com (China mirror, may be slow abroad)
+  CURL_OPTS="-L --fail --retry 2 --connect-timeout 30 --max-time 600"
+  if curl $CURL_OPTS -o "$output" "https://huggingface.co/${url}"; then
     return 0
   else
-    echo "  ⚠  hf-mirror failed, trying huggingface.co..."
-    curl -L --fail --retry 2 -o "$output" "https://huggingface.co/${url}"
+    echo "  ⚠  huggingface.co failed, trying hf-mirror.com..."
+    curl $CURL_OPTS -o "$output" "https://hf-mirror.com/${url}"
   fi
 }
 
