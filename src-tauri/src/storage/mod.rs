@@ -32,10 +32,10 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            stt_provider: "glm-asr".to_string(),
+            stt_provider: "cloud".to_string(),
             stt_api_key: String::new(),
             stt_language: "multi".to_string(),
-            llm_provider: "openrouter".to_string(),
+            llm_provider: "cloud".to_string(),
             llm_api_key: String::new(),
             llm_model: "google/gemini-2.5-flash".to_string(),
             llm_base_url: "https://openrouter.ai/api/v1".to_string(),

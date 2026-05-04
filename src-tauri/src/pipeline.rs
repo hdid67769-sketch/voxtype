@@ -89,6 +89,8 @@ pub struct PipelineHandle {
     preloaded_selected_text: Arc<Mutex<Option<String>>>,
     recording_start: Arc<Mutex<Option<std::time::Instant>>>,
     shared_client: reqwest::Client,
+    /// Whether the server already polished text (WS mode), so client skips LLM.
+    server_did_polish: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl PipelineHandle {
@@ -106,6 +108,7 @@ impl PipelineHandle {
             preloaded_selected_text: Arc::new(Mutex::new(None)),
             recording_start: Arc::new(Mutex::new(None)),
             shared_client: reqwest::Client::new(),
+            server_did_polish: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -223,8 +226,11 @@ impl PipelineHandle {
             .unwrap_or_else(|e| e.into_inner())
             .clear();
 
-        // P0-2: Load config BEFORE starting audio capture — fail fast on missing API key
-        let config_data = self.load_config().await;
+        // Load config BEFORE starting audio capture — fail fast on missing API key
+        let mut config_data = self.load_config().await;
+        // Cloud-only: force LLM provider to "cloud" regardless of stored config.
+        // STT provider is respected as-is (supports cloud + local-sensevoice).
+        config_data.llm_provider = "cloud".to_string();
         *self
             .preloaded_config
             .lock()
@@ -250,8 +256,11 @@ impl PipelineHandle {
             config_data.stt_language
         );
 
-        // Guard: empty API key — bail before starting audio (skip for cloud provider)
-        if config_data.stt_api_key.is_empty() && config_data.stt_provider != "cloud" {
+        // Guard: empty API key — bail before starting audio (skip for cloud & local providers)
+        if config_data.stt_api_key.is_empty()
+            && config_data.stt_provider != "cloud"
+            && config_data.stt_provider != "local-sensevoice"
+        {
             let _ = self.app_handle.emit(
                 "pipeline:error",
                 "STT API key is not configured. Please set it in Settings → Speech Recognition.",
@@ -280,6 +289,8 @@ impl PipelineHandle {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .clone()
+        } else if config_data.stt_provider == "local-sensevoice" {
+            String::new() // Local provider — no API key needed
         } else {
             config_data.stt_api_key.clone()
         };
@@ -317,6 +328,9 @@ impl PipelineHandle {
             self.set_state(PipelineState::Idle);
             return Ok(());
         }
+
+        // Record whether server-side polishing is enabled (WS mode)
+        self.server_did_polish.store(!provider.needs_polishing(), std::sync::atomic::Ordering::SeqCst);
 
         // Start audio capture on dedicated thread
         let config = AudioConfig::default();
@@ -501,7 +515,11 @@ impl PipelineHandle {
             .unwrap_or_else(|e| e.into_inner())
             .take();
         let config = match preloaded_config {
-            Some(c) => c,
+            Some(mut c) => {
+                // Cloud-only: ensure llm_provider is always "cloud"
+                c.llm_provider = "cloud".to_string();
+                c
+            }
             None => self.load_config().await,
         };
         let app_ctx = self
@@ -529,8 +547,10 @@ impl PipelineHandle {
         // garbled output that differed from what History recorded.
 
         // Pre-build LLM provider and Enigo while STT is still processing
+        // Skip if server already polished (WS mode: disconnect() returns polished text)
         let pre_llm = if config.polish_enabled
             && (!config.llm_api_key.is_empty() || config.llm_provider == "cloud")
+            && !self.server_did_polish.load(std::sync::atomic::Ordering::SeqCst)
         {
             let llm_api_key = if config.llm_provider == "cloud" {
                 self.app_handle
@@ -557,14 +577,19 @@ impl PipelineHandle {
         };
 
         // Wait for STT task to finish (handles both streaming and file-based providers)
-        // Timeout after 120s to support long recordings
+        // LocalSenseVoice may need up to 10min on first run (model download ~200MB)
+        let finalize_timeout = if config_data.stt_provider == "local-sensevoice" {
+            600 // 10 min: covers model download + inference
+        } else {
+            STT_FINALIZE_TIMEOUT_SECS
+        };
         let stt_done = self.stt_done.clone();
         tokio::select! {
             _ = stt_done.notified() => {
                 tracing::debug!("STT task completed");
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(STT_FINALIZE_TIMEOUT_SECS)) => {
-                tracing::warn!("STT task timed out after {}s, using accumulated text so far", STT_FINALIZE_TIMEOUT_SECS);
+            _ = tokio::time::sleep(std::time::Duration::from_secs(finalize_timeout)) => {
+                tracing::warn!("STT task timed out after {}s, using accumulated text so far", finalize_timeout);
             }
         }
 
@@ -626,6 +651,16 @@ impl PipelineHandle {
                         );
                         raw_text.clone()
                     } else {
+                        // DEBUG: log the exact polished text with visible newlines
+                        tracing::info!(
+                            "[DEBUG] polished_text raw bytes (len={}): {:?}",
+                            response.polished_text.len(),
+                            response.polished_text.as_bytes()
+                        );
+                        tracing::info!(
+                            "[DEBUG] polished_text visible: {}",
+                            response.polished_text.replace('\n', "\\n")
+                        );
                         response.polished_text
                     };
                     llm_elapsed = llm_start.elapsed();
@@ -784,6 +819,11 @@ impl PipelineHandle {
             "cloud" => {
                 let base = crate::api_base_url();
                 format!("{}/api/proxy/stt", base)
+            }
+            "local-sensevoice" => {
+                // Local inference — no network pre-warm needed, trigger model loading instead
+                tracing::debug!("LocalSenseVoice: skipping HTTP pre-warm");
+                return;
             }
             "glm-asr" => "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions".to_string(),
             "openai-whisper" => "https://api.openai.com/v1/audio/transcriptions".to_string(),

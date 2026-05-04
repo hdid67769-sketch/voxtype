@@ -26,6 +26,10 @@ tauri-plugin-autostart = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+
+# ── Updater (desktop only) ──
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 cpal = "0.15"
@@ -44,6 +48,16 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 chrono = "0.4"
 url = "2"
 base64 = "0.22"
+sensevoice-rs = { version = "0.1.7", default-features = false }
+sha2 = "0.10"
+dirs = "5"
+
+# ── Patched sensevoice-rs with bundled VAD path support ──
+# Original hardcodes hf_hub::Api for VAD model loading (model.pt + am.mvn).
+# Our patch adds optional `VadConfig.{model_path, cmvn_path}` fields
+# so VAD can load from local bundled files without any network access.
+[patch.crates-io]
+sensevoice-rs = { path = "patched-crates/sensevoice-rs" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"

@@ -1,121 +1,191 @@
 import { useTranslation } from 'react-i18next'
-import { useAppStore } from '../../stores/appStore'
-import { useAuthStore } from '../../stores/authStore'
-import { STT_PROVIDERS, LANGUAGES } from '../../lib/constants'
-import { benchSttConnection } from '../../lib/tauri'
-import { FormField } from './shared/FormField'
-import { CheckCircle2, XCircle, Loader2, Crown } from 'lucide-react'
+import type { TFunction } from 'i18next'
+import { useEffect, useRef, useCallback, useState } from 'react'
+import { getLocalModelStatus, resetLocalModel, type LocalModelStatus } from '../../lib/tauri'
+import { CheckCircle2, AlertCircle, Loader2, RefreshCw } from 'lucide-react'
+
+/// Format seconds into human-readable string: "1m 23s"
+function formatElapsed(secs: number): string {
+  if (secs < 60) return `${secs}s`
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return s > 0 ? `${m}m ${s}s` : `${m}m`
+}
 
 export function SttPane() {
-  const config = useAppStore((s) => s.config)
-  const updateConfig = useAppStore((s) => s.updateConfig)
-  const sttTestStatus = useAppStore((s) => s.sttTestStatus)
-  const setSttTestStatus = useAppStore((s) => s.setSttTestStatus)
-  const sttLatencyMs = useAppStore((s) => s.sttLatencyMs)
-  const setSttLatencyMs = useAppStore((s) => s.setSttLatencyMs)
-  const { user, plan } = useAuthStore()
   const { t } = useTranslation()
 
-  const isCloud = config.stt_provider === 'cloud'
+  // ─── Local model status state ──────────────────────────────
+  const [modelStatus] = useLocalModelStatus(true)
 
-  const handleTest = async () => {
-    setSttTestStatus('testing')
-    setSttLatencyMs(null)
-    try {
-      const ms = await benchSttConnection(config.stt_api_key, config.stt_provider)
-      console.log('[STT Test] Received latency:', ms, 'type:', typeof ms)
-      setSttLatencyMs(ms)
-      setSttTestStatus('success')
-    } catch (err) {
-      console.error('[STT Test] Error:', err)
-      setSttTestStatus('error')
-    }
-  }
+  // ─── Render ───────────────────────────────────────────────
 
   return (
     <div className="space-y-5">
-      <FormField label={t('settings.provider')}>
-        <select
-          value={config.stt_provider}
-          onChange={(e) => {
-            updateConfig({ stt_provider: e.target.value as typeof config.stt_provider })
-            setSttTestStatus('idle')
-            setSttLatencyMs(null)
-          }}
-          className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-[10px] text-[13px] text-text-primary outline-none focus:border-border-focus transition-colors"
-        >
-          {STT_PROVIDERS.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </FormField>
+      {/* Local SenseVoice model status card */}
+      <ModelStatusCard status={modelStatus} t={t} />
 
-      {isCloud ? (
-        <div className="border border-border rounded-[10px] px-3 py-3 space-y-2">
-          <div className="flex items-center gap-2 text-[13px]">
-            <Crown size={14} className="text-accent" />
-            <span className="text-text-primary font-medium">{t('settings.cloudSttPro')}</span>
-          </div>
-          {!user ? (
-            <p className="text-[12px] text-text-secondary">{t('settings.sttSignInHint')}</p>
-          ) : plan !== 'pro' ? (
-            <p className="text-[12px] text-text-secondary">{t('settings.sttUpgradeHint')}</p>
-          ) : (
-            <p className="text-[12px] text-green-500">{t('settings.sttProActive')}</p>
-          )}
-        </div>
-      ) : (
-        <FormField label={t('settings.apiKey')}>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={config.stt_api_key}
-              onChange={(e) => {
-                updateConfig({ stt_api_key: e.target.value })
-                setSttTestStatus('idle')
-                setSttLatencyMs(null)
-              }}
-              placeholder={t('settings.enterApiKey')}
-              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-[10px] text-[13px] text-text-primary outline-none focus:border-border-focus transition-colors"
-            />
-            <button
-              onClick={handleTest}
-              disabled={!config.stt_api_key || sttTestStatus === 'testing'}
-              className="px-4 py-2.5 bg-accent text-white rounded-[10px] text-[13px] border-none cursor-pointer hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
-            >
-              {sttTestStatus === 'testing' && <Loader2 size={14} className="animate-spin" />}
-              {t('settings.test')}
-            </button>
-          </div>
-          {sttTestStatus === 'success' && (
-            <p className="flex items-center gap-1 text-[12px] text-success mt-2">
-              <CheckCircle2 size={13} /> {sttLatencyMs !== null ? `${sttLatencyMs}ms` : t('settings.connectionSuccess')}
-            </p>
-          )}
-          {sttTestStatus === 'error' && (
-            <p className="flex items-center gap-1 text-[12px] text-error mt-2">
-              <XCircle size={13} /> {t('settings.connectionFailed')}
-            </p>
-          )}
-          <p className="text-[11px] text-text-tertiary mt-1.5">{t('settings.storedLocally')}</p>
-        </FormField>
-      )}
-
-      <FormField label={t('settings.sttLanguage')}>
-        <select
-          value={config.stt_language}
-          onChange={(e) => updateConfig({ stt_language: e.target.value })}
-          className="w-full px-3 py-2.5 bg-bg-secondary border border-border rounded-[10px] text-[13px] text-text-primary outline-none focus:border-border-focus transition-colors"
-        >
-          {LANGUAGES.map((l) => (
-            <option key={l.value} value={l.value}>
-              {l.label}
-            </option>
-          ))}
-        </select>
-      </FormField>
+      {/* Local mode note */}
+      <p className="text-[11px] text-text-secondary">
+        ⚡ {t('settings.localSenseVoiceNote')}
+      </p>
     </div>
   )
+}
+
+// ─── Model Status Card Component ──────────────────────────────
+
+function ModelStatusCard({
+  status,
+  t,
+}: {
+  status: LocalModelStatus | null
+  t: TFunction
+}) {
+  if (!status) return null
+
+  switch (status.status) {
+    case 'loading': {
+      const elapsed = formatElapsed(status.elapsedSecs)
+      return (
+        <div className="border border-green-200 dark:border-green-800 rounded-[10px] px-4 py-4 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <Loader2 size={18} className="text-green-500 shrink-0 animate-spin" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-medium text-text-primary">
+                {t('settings.modelLoading')}
+              </p>
+              <p className="text-[11px] text-text-secondary mt-0.5 truncate">
+                {status.message || t('settings.modelLoadingDesc')}
+              </p>
+            </div>
+            <span className="text-[11px] text-text-secondary tabular-nums shrink-0 whitespace-nowrap">
+              {elapsed}
+            </span>
+          </div>
+
+          {/* Indeterminate progress bar */}
+          <div className="w-full h-1.5 bg-green-100 dark:bg-green-900/30 rounded-full overflow-hidden">
+            <div className="h-full w-1/3 bg-gradient-to-r from-green-400 to-emerald-400 rounded-full animate-pulse" />
+          </div>
+
+          <p className="text-[10px] text-text-secondary">
+            ⏱ {t('settings.modelLoadTime')}
+          </p>
+        </div>
+      )
+    }
+
+    case 'ready':
+      return (
+        <div className="border border-green-200 dark:border-green-800 rounded-[10px] px-4 py-3 space-y-2 bg-green-50/50 dark:bg-green-950/20">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 size={16} className="text-green-500 shrink-0" />
+            <div>
+              <p className="text-[13px] font-medium text-green-600 dark:text-green-400">
+                {t('settings.modelReady')}
+              </p>
+              <p className="text-[11px] text-text-secondary mt-0.5">
+                {t('settings.localSenseVoiceInfo')}
+              </p>
+            </div>
+          </div>
+        </div>
+      )
+
+    case 'failed':
+      return (
+        <div className="border border-red-200 dark:border-red-800 rounded-[10px] px-4 py-4 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-medium text-red-600 dark:text-red-400">
+                {t('settings.modelError')}
+              </p>
+              <p className="text-[11px] text-text-secondary mt-1 break-all">
+                {status.message || t('settings.modelErrorUnknown')}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={async () => {
+                try {
+                  await resetLocalModel()
+                  window.location.reload()
+                } catch {
+                  window.location.reload()
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer"
+            >
+              <RefreshCw size={12} />
+              {t('settings.modelRetry')}
+            </button>
+          </div>
+          <p className="text-[10px] text-text-secondary">
+            💡 {t('settings.modelErrorTip')}
+          </p>
+        </div>
+      )
+  }
+
+  // Fallback (shouldn't reach here with proper typing)
+  return null
+}
+
+// ─── Custom hook: poll local model status ─────────────────────
+
+/**
+ * Polls the Rust backend for SenseVoice model loading status.
+ * Auto-polls every 2s when active and status is "loading".
+ */
+function useLocalModelStatus(active: boolean): [
+  LocalModelStatus | null,
+  React.Dispatch<React.SetStateAction<LocalModelStatus | null>>
+] {
+  const [modelStatus, setModelStatus] = useState<LocalModelStatus | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const poll = useCallback(async (): Promise<boolean> => {
+    try {
+      const status = await getLocalModelStatus()
+      setModelStatus(status)
+      return status.status === 'loading'
+    } catch {
+      return false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!active) {
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      setModelStatus(null)
+      return
+    }
+
+    // Initial fetch immediately
+    poll()
+
+    timerRef.current = setInterval(() => {
+      poll().then((keepPolling) => {
+        if (!keepPolling && timerRef.current !== null) {
+          clearInterval(timerRef.current)
+          timerRef.current = null
+        }
+      })
+    }, 2000)
+
+    return () => {
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [active, poll])
+
+  return [modelStatus, setModelStatus]
 }

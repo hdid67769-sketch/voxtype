@@ -15,6 +15,9 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
+
+// Import STT traits for local-sensevoice provider calls
+use stt::SttProvider;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
 use tracing_subscriber::EnvFilter;
@@ -22,7 +25,7 @@ use tracing_subscriber::EnvFilter;
 use std::sync::{Arc, Mutex};
 
 /// Default cloud API base URL. Override with the `API_BASE_URL` environment variable.
-pub const DEFAULT_API_BASE_URL: &str = "https://api.vox-type.com";
+pub const DEFAULT_API_BASE_URL: &str = "https://api.voxtype.net";
 
 /// Read the cloud API base URL from the environment, falling back to the compiled default.
 pub fn api_base_url() -> String {
@@ -183,6 +186,20 @@ async fn test_stt_connection(
         }
         let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
         return Ok(body["plan"].as_str() == Some("pro"));
+    }
+
+    // Local SenseVoice: check model can be initialized
+    if provider == "local-sensevoice" {
+        match stt::local_sensevoice::LocalSenseVoiceProvider::new()
+            .connect(&stt::SttConfig::default())
+            .await
+        {
+            Ok(()) => return Ok(true),
+            Err(e) => {
+                tracing::warn!("SenseVoice init failed: {}", e);
+                return Ok(false);
+            }
+        }
     }
 
     if api_key.is_empty() {
@@ -439,6 +456,18 @@ async fn bench_stt_connection(
         return Ok(elapsed);
     }
 
+    // Local SenseVoice: benchmark model init + dummy inference
+    if provider == "local-sensevoice" {
+        let t0 = std::time::Instant::now();
+        return match stt::local_sensevoice::LocalSenseVoiceProvider::new()
+            .connect(&stt::SttConfig::default())
+            .await
+        {
+            Ok(()) => Ok(t0.elapsed().as_millis() as u32),
+            Err(e) => Err(format!("SenseVoice init failed: {e}")),
+        };
+    }
+
     if api_key.is_empty() {
         return Err("API key is empty".to_string());
     }
@@ -690,6 +719,107 @@ async fn set_session_token(
     token: String,
 ) -> Result<(), String> {
     *state.0.lock().unwrap_or_else(|e| e.into_inner()) = token;
+    Ok(())
+}
+
+/// Returns the current SenseVoice local model loading status for UI display.
+#[tauri::command]
+fn get_local_model_status() -> stt::local_sensevoice::ModelStatusInfo {
+    stt::local_sensevoice::model_status_info()
+}
+
+/// Reset the local model cache so it will re-initialize on next use (retry after failure).
+#[tauri::command]
+fn reset_local_model() {
+    stt::local_sensevoice::reset_model();
+}
+
+/// Diagnostic: return bundled model detection results for troubleshooting.
+#[tauri::command]
+fn debug_sensevoice_paths() -> String {
+    use std::path::PathBuf;
+    let mut out = String::new();
+    
+    // 1. Check common resource locations (platform-agnostic)
+    out.push_str("=== Resource Candidates ===\n");
+    
+    // Try app bundle path first
+    if let Ok(exe_dir) = std::env::current_exe() {
+        // macOS .app bundle: .../VoxType.app/Contents/MacOS/VoxType → Resources/
+        if let Some(macOS) = exe_dir.parent() {
+            if let Some(contents) = macOS.parent() {
+                let res = contents.join("Resources").join("sensevoice");
+                if res.exists() {
+                    out.push_str(&format!("Bundle: {}\n", res.display()));
+                }
+            }
+        }
+    }
+    
+    // Dev mode: CARGO_MANIFEST_DIR-based fallbacks
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for suffix in &["resources/sensevoice", "sensevoice"] {
+        let candidate = manifest_dir.join(suffix);
+        if candidate.exists() {
+            out.push_str(&format!("Dev: {}\n", candidate.display()));
+            for f in ["model.pt", "chn_jpn_yue_eng_ko_spectok.bpe.model", "am.mvn"] {
+                let p = candidate.join(f);
+                out.push_str(&format!(
+                    "  {}: exists={} size={}\n",
+                    p.display(),
+                    p.exists(),
+                    p.metadata().map(|m| m.len()).unwrap_or(0)
+                ));
+            }
+            // Also check VAD subdirectory
+            let vad_dir = candidate.join("vad");
+            if vad_dir.exists() {
+                for vf in ["model.pt", "am.mvn"] {
+                    let vp = vad_dir.join(vf);
+                    out.push_str(&format!(
+                        "  vad/{}: exists={} size={}\n",
+                        vp.file_name().unwrap_or_default().to_string_lossy(),
+                        vp.exists(),
+                        vp.metadata().map(|m| m.len()).unwrap_or(0)
+                    ));
+                }
+            }
+        }
+    }
+    
+    // 2. Model status via public API
+    out.push_str("\n=== MODEL STATUS ===\n");
+    let status = crate::stt::local_sensevoice::model_status_info();
+    out.push_str(&format!("status={:?}\n", status.status));
+    out.push_str(&format!("message={}\n", status.message));
+    out.push_str(&format!("elapsedSecs={}\n", status.elapsed_secs));
+    out.push_str(&format!("cacheExists={}\n", status.cache_exists));
+    
+    out
+}
+
+/// Ensure the capsule window stays above all windows,
+/// including fullscreen apps on macOS.
+/// Frontend must call this before showing the capsule.
+#[tauri::command]
+fn ensure_capsule_on_top(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(capsule) = app.get_webview_window("capsule") {
+            if let Ok(ns_window_ptr) = capsule.ns_window() {
+                let ns_window = ns_window_ptr as *mut objc::runtime::Object;
+                unsafe {
+                    // Preserve existing behavior flags, add FullScreenAuxiliary + CanJoinAllSpaces
+                    let current_behavior: u64 = msg_send![ns_window, collectionBehavior];
+                    let new_behavior = current_behavior | (1 << 7) | (1 << 0);
+                    let _: () = msg_send![ns_window, setCollectionBehavior: new_behavior];
+
+                    // CGMaximumWindowLevel = i32::MAX
+                    let _: () = msg_send![ns_window, setLevel: 2147483647_i64];
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -1075,6 +1205,14 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
+            // Register updater plugin (desktop only)
+            #[cfg(desktop)]
+            {
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())
+                    .expect("Failed to register updater plugin");
+            }
+
             // Set capsule window WebView background to fully transparent
             // to prevent white rectangle behind the capsule on macOS
             if let Some(capsule) = app.get_webview_window("capsule") {
@@ -1084,13 +1222,29 @@ pub fn run() {
 
                     let _ = capsule.set_background_color(Some(Color(0, 0, 0, 0)));
 
-                    // Raise capsule window level to NSStatusWindowLevel (25)
-                    // so it stays visible above fullscreen apps
-                    // (Tauri default alwaysOnTop = NSFloatingWindowLevel = 3, easily occluded)
+                    // Raise capsule window level to NSScreenSaverWindowLevel (1000)
+                    // and allow it to appear on all Spaces including fullscreen.
+                    // NOTE: setCollectionBehavior REPLACES all flags, so we must
+                    // read current behavior first and OR the new flag in.
                     if let Ok(ns_window_ptr) = capsule.ns_window() {
                         let ns_window = ns_window_ptr as *mut objc::runtime::Object;
                         unsafe {
-                            let _: () = msg_send![ns_window, setLevel: 25_i64];
+                            // Get current collection behavior, then add FullScreenAuxiliary
+                            let current_behavior: u64 =
+                                msg_send![ns_window, collectionBehavior];
+                            let new_behavior = current_behavior | (1 << 7); // NSWindowCollectionBehaviorFullScreenAuxiliary
+                            let _: () =
+                                msg_send![ns_window, setCollectionBehavior: new_behavior];
+
+                            // Also join all Spaces for safety
+                            let latest_behavior: u64 =
+                                msg_send![ns_window, collectionBehavior];
+                            let with_all_spaces = latest_behavior | (1 << 0); // NSWindowCollectionBehaviorCanJoinAllSpaces
+                            let _: () =
+                                msg_send![ns_window, setCollectionBehavior: with_all_spaces];
+
+                            // Finally, set window level to CGMaximumWindowLevel
+                            let _: () = msg_send![ns_window, setLevel: 2147483647_i64];
                         }
                     }
                 }
@@ -1108,6 +1262,17 @@ pub fn run() {
             }
 
             let app_handle = app.handle().clone();
+
+            // Inject Tauri resource dir path for bundled SenseVoice model loading
+            {
+                let res_dir = app.path().resource_dir().ok().map(|p| p.to_path_buf());
+                let res_display = res_dir
+                    .as_ref()
+                    .map(|p| format!("{}", p.display()))
+                    .unwrap_or_else(|| "None".to_string());
+                stt::local_sensevoice::set_resource_dir(res_dir);
+                tracing::info!("Resource dir set for SenseVoice: {}", res_display);
+            }
 
             // Initialize data directory and database
             let data_dir = app.path().app_data_dir()?;
@@ -1370,6 +1535,10 @@ pub fn run() {
             resume_hotkey,
             set_auto_start,
             set_session_token,
+            get_local_model_status,
+            reset_local_model,
+            debug_sensevoice_paths,
+            ensure_capsule_on_top,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

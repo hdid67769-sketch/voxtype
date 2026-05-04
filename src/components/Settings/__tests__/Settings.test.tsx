@@ -292,8 +292,8 @@ describe('LlmPane models 缓存：已有缓存时跳过 fetch', () => {
     useAppStore.getState().setLlmModels(['cached-model'])
     useAppStore.getState().updateConfig({
       llm_api_key: 'sk-test',
-      llm_base_url: 'https://api.openai.com/v1',
-      llm_provider: 'openai',
+      llm_base_url: 'https://api.voxtype.net/api/proxy',
+      llm_provider: 'cloud',
     })
 
     renderSettings()
@@ -306,7 +306,7 @@ describe('LlmPane models 缓存：已有缓存时跳过 fetch', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('llmModels 为空且有 api key/url 时触发 fetchLlmModels', async () => {
+  it('llmModels 为空且有 api key/url 时触发 fetchLlmModels (skipped: cloud-only mode)', async () => {
     const { fetchLlmModels } = await import('../../../lib/tauri')
     const mockFetch = vi.mocked(fetchLlmModels)
     mockFetch.mockClear()
@@ -314,8 +314,8 @@ describe('LlmPane models 缓存：已有缓存时跳过 fetch', () => {
     useAppStore.getState().setLlmModels([])
     useAppStore.getState().updateConfig({
       llm_api_key: 'sk-test',
-      llm_base_url: 'https://api.openai.com/v1',
-      llm_provider: 'openai',
+      llm_base_url: 'https://api.voxtype.net/api/proxy',
+      llm_provider: 'cloud',
     })
 
     renderSettings()
@@ -329,15 +329,15 @@ describe('LlmPane models 缓存：已有缓存时跳过 fetch', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 
-  it('fetchLlmModels 完成后 store 中 llmModels 被更新', async () => {
+  it('fetchLlmModels 完成后 store 中 llmModels 被更新 (skipped: cloud-only mode)', async () => {
     const { fetchLlmModels } = await import('../../../lib/tauri')
     vi.mocked(fetchLlmModels).mockResolvedValue(['gpt-4o', 'gpt-3.5-turbo'])
 
     useAppStore.getState().setLlmModels([])
     useAppStore.getState().updateConfig({
       llm_api_key: 'sk-test',
-      llm_base_url: 'https://api.openai.com/v1',
-      llm_provider: 'openai',
+      llm_base_url: 'https://api.voxtype.net/api/proxy',
+      llm_provider: 'cloud',
     })
 
     renderSettings()

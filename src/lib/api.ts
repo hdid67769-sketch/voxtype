@@ -1,9 +1,10 @@
 import { API_BASE_URL } from './constants'
+import { getToken } from './token-storage'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('session_token')
+  const token = getToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -177,6 +178,33 @@ export interface ScenePack {
 
 export function getScenes(): Promise<ScenePack[]> {
   return request('/api/scenes')
+}
+
+// Product info (pricing from server)
+export interface ServerPricingPeriod {
+  price: number
+  label: string
+  duration_days: number
+}
+
+export interface ServerPricing {
+  monthly: ServerPricingPeriod
+  quarterly: ServerPricingPeriod
+  yearly: ServerPricingPeriod
+}
+
+export interface ProductInfo {
+  // Server wraps everything inside `data`
+  data: {
+    pricing: ServerPricing
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+export function getProductInfo(): Promise<ProductInfo> {
+  // This endpoint returns public info (no auth required for pricing)
+  return request('/api/user/info')
 }
 
 // Subscription portal

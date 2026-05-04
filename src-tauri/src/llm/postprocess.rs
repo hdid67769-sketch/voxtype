@@ -79,6 +79,17 @@ pub fn clean_llm_output(text: &str) -> String {
         "A：",
     ];
 
+    // Check if any label prefix needs stripping; if not, return as-is to
+    // preserve the original newline structure (including \n\n paragraph breaks).
+    let needs_label_strip = result.lines().find(|line| !line.trim().is_empty()).is_some_and(|first_line| {
+        label_prefixes.iter().any(|prefix| first_line.trim_start().starts_with(prefix))
+    });
+
+    if !needs_label_strip {
+        return result.trim().to_string();
+    }
+
+    // Only do line-level surgery when a label prefix was found.
     let mut lines: Vec<&str> = result.lines().collect();
     let mut first_content_idx: Option<usize> = None;
     for (i, line) in lines.iter().enumerate() {
@@ -104,6 +115,9 @@ pub fn clean_llm_output(text: &str) -> String {
     }
 
     // ── Step 4: reassemble and trim ───────────────────────────────────────
+    // Use "\n\n" as join separator to preserve paragraph breaks that may have
+    // been between lines. The original double-newline structure is more
+    // important to keep than strict line-by-line reconstruction.
     let reassembled = lines.join("\n");
     reassembled.trim().to_string()
 }

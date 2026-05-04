@@ -147,8 +147,9 @@ impl LlmProvider for CloudLlmProvider {
                 }
             }
 
+            let cleaned = super::postprocess::clean_llm_output(&full_text);
             Ok(PolishResponse {
-                polished_text: full_text,
+                polished_text: cleaned,
             })
         } else {
             let v: serde_json::Value = response.json().await?;
@@ -158,8 +159,9 @@ impl LlmProvider for CloudLlmProvider {
                 .unwrap_or("")
                 .to_string();
 
+            let cleaned = super::postprocess::clean_llm_output(&text);
             Ok(PolishResponse {
-                polished_text: text,
+                polished_text: cleaned,
             })
         }
     }

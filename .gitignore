@@ -18,6 +18,11 @@ dist-ssr
 *.local
 .env
 .env.*
+src-tauri/updater.key
+src-tauri/updater.key.bak
+src-tauri/updater.key.pub.bak
+src-tauri/resources/
+.workbuddy/
 
 # Editor directories and files
 .vscode/*

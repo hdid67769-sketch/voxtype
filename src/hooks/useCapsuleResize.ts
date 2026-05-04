@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useAppStore, type PipelineState } from '../stores/appStore'
+import { invoke } from '@tauri-apps/api/core'
 
 /** Re-assert always-on-top so the capsule stays visible above all windows. */
 async function bringToFront(win: import('@tauri-apps/api/window').Window) {
+  // macOS: ensure capsule window level is above fullscreen apps
+  await invoke('ensure_capsule_on_top').catch(() => {})
   await win.setAlwaysOnTop(true).catch(() => {})
   await win.show().catch(() => {})
 }

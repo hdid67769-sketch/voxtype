@@ -72,7 +72,7 @@ describe('authStore', () => {
   describe('signOut', () => {
     it('clears user and resets to free plan', async () => {
       useAuthStore.setState({
-        user: { id: '1', email: 'test@example.com', name: 'Test' },
+        user: { id: '1', phone: '13800138000', email: 'test@example.com', name: 'Test' },
         plan: 'pro',
         subscriptionEnd: '2025-12-31',
         sttSecondsUsed: 100,
@@ -94,7 +94,7 @@ describe('authStore', () => {
   describe('refreshSubscription', () => {
     it('updates quota fields from API response', async () => {
       useAuthStore.setState({
-        user: { id: '1', email: 'test@example.com', name: 'Test' },
+        user: { id: '1', phone: '13800138000', email: 'test@example.com', name: 'Test' },
       })
 
       await getState().refreshSubscription()

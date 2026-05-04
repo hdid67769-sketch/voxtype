@@ -3,9 +3,8 @@ export const APP_NAME = 'VoxType'
 export const APP_VERSION = 'v0.1.0'
 export const APP_REPO_URL = 'https://github.com/hdid67769-sketch/voxtype'
 export const APP_LICENSE_URL = 'https://github.com/hdid67769-sketch/voxtype/blob/main/LICENSE'
-// Cloud API base URL — defaults to www.vox-type.com but can be overridden via VITE_API_BASE_URL env var.
-// All core features (BYOK mode) work without any cloud connection.
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://api.vox-type.com'
+// Cloud API base URL — defaults to voxtype.net but can be overridden via VITE_API_BASE_URL env var.
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://api.voxtype.net'
 
 export const FREE_PLAN = {
   sttMinutes: 15,
@@ -16,7 +15,7 @@ export type PlanPeriod = 'monthly' | 'quarterly' | 'yearly'
 
 export const PRO_PLANS = {
   monthly: {
-    price: '¥1',
+    price: '¥15',
     period: '/月',
     planType: 'monthly' as PlanPeriod,
     features: [
@@ -27,10 +26,10 @@ export const PRO_PLANS = {
     ],
   },
   quarterly: {
-    price: '¥30',
+    price: '¥36',
     period: '/季',
     planType: 'quarterly' as PlanPeriod,
-    save: '省 17%',
+    save: '省 20%',
     features: [
       { label: '专属润色模型', detail: '效果更优' },
       { label: '免配置 STT', detail: '开箱即用' },
@@ -39,10 +38,10 @@ export const PRO_PLANS = {
     ],
   },
   yearly: {
-    price: '¥99',
+    price: '¥120',
     period: '/年',
     planType: 'yearly' as PlanPeriod,
-    save: '省 31%',
+    save: '省 33%',
     features: [
       { label: '专属润色模型', detail: '效果更优' },
       { label: '免配置 STT', detail: '开箱即用' },
@@ -54,52 +53,23 @@ export const PRO_PLANS = {
 
 // 兼容旧代码的默认引用
 export const PRO_PLAN = {
-  price: '¥1',
+  price: '¥15',
   period: '月',
   features: PRO_PLANS.monthly.features,
 } as const
 
+// STT providers: Local SenseVoice only
 export const STT_PROVIDERS = [
-  { value: 'deepgram', label: 'Deepgram Nova-3' },
-  { value: 'assemblyai', label: 'AssemblyAI' },
-  { value: 'glm-asr', label: 'GLM-ASR (智谱)' },
-  { value: 'openai-whisper', label: 'OpenAI Whisper' },
-  { value: 'groq-whisper', label: 'Groq Whisper' },
-  { value: 'siliconflow', label: 'SiliconFlow (硅基流动)' },
-  { value: 'qwen3-asr', label: 'Qwen3-ASR-Flash (阿里)' },
-  { value: 'cloud', label: 'VoxType Cloud' },
+  { value: 'local-sensevoice', label: 'Local SenseVoice (Offline)' },
 ] as const
 
+// Cloud-only: only VoxType Cloud provider
 export const LLM_PROVIDERS = [
-  { value: 'zhipu', label: '智谱 (Zhipu)' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'siliconflow', label: '硅基流动 (SiliconFlow)' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'gemini', label: 'Google Gemini' },
-  { value: 'moonshot', label: 'Moonshot (Kimi)' },
-  { value: 'qwen', label: '通义千问 (Qwen)' },
-  { value: 'groq', label: 'Groq' },
-  { value: 'claude', label: 'Claude' },
-  { value: 'ollama', label: 'Ollama (Local)' },
-  { value: 'openrouter', label: 'OpenRouter' },
   { value: 'cloud', label: 'VoxType Cloud' },
 ] as const
 
+// Cloud-only mode — only default config for 'cloud'
 export const LLM_DEFAULT_CONFIG: Record<string, { baseUrl: string; model: string }> = {
-  zhipu: { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash' },
-  deepseek: { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-  siliconflow: { baseUrl: 'https://api.siliconflow.cn/v1', model: 'Qwen/Qwen2.5-7B-Instruct' },
-  openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  gemini: {
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-2.0-flash',
-  },
-  moonshot: { baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
-  qwen: { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-turbo' },
-  groq: { baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
-  claude: { baseUrl: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4' },
-  ollama: { baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
-  openrouter: { baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
   cloud: { baseUrl: `${API_BASE_URL}/api/proxy`, model: 'default' },
 }
 

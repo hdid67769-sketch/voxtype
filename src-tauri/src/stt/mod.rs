@@ -1,6 +1,7 @@
 pub mod assemblyai;
 pub mod cloud;
 pub mod deepgram;
+pub mod local_sensevoice;
 pub mod qwen_asr;
 pub mod whisper_compat;
 
@@ -44,7 +45,15 @@ pub trait SttProvider: Send + Sync {
     async fn send_audio(&mut self, chunk: &[u8]) -> Result<()>;
     async fn recv_transcript(&mut self) -> Result<Option<TranscriptEvent>>;
     /// Disconnect and optionally return a final transcript (for file-based providers).
+    /// For WebSocket providers, this may return already-LLM-polished text.
     async fn disconnect(&mut self) -> Result<Option<String>>;
+
+    /// Whether the output of disconnect() has already been LLM-polished by the server.
+    /// Default: true (client-side polishing). Override to false for server-side polishing.
+    fn needs_polishing(&self) -> bool {
+        true
+    }
+
     fn name(&self) -> &str;
 }
 
@@ -98,6 +107,7 @@ pub fn create_provider(
             Some(ref c) => Box::new(qwen_asr::QwenAsrProvider::with_client(c.clone())),
             None => Box::new(qwen_asr::QwenAsrProvider::new()),
         },
+        "local-sensevoice" => Box::new(local_sensevoice::LocalSenseVoiceProvider::new()),
         _ => make(WhisperCompatConfig {
             provider_name: "GLM-ASR",
             endpoint: "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions",

@@ -119,7 +119,10 @@ export function History() {
                       className="group flex items-start gap-3 px-3 py-2.5 rounded-[10px] hover:bg-bg-secondary transition-colors"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] text-text-primary leading-relaxed">
+                        <p className="text-[11px] text-text-tertiary line-through whitespace-pre-wrap">
+                          {entry.raw_text}
+                        </p>
+                        <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-wrap">
                           {entry.polished_text}
                         </p>
                         <p className="text-[11px] text-text-tertiary mt-1">

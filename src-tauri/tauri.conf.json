@@ -43,19 +43,31 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://api.vox-type.com https://api.vox-type.com https://*.vox-type.com https://accounts.google.com https://github.com"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://api.voxtype.net https://api.voxtype.net https://*.voxtype.net https://accounts.google.com https://github.com"
     }
   },
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["opentypeless"]
+        "schemes": [
+          "opentypeless"
+        ]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI0QThGNkE0RjkxNDRGRkUKUldUK1R4VDVwUGFvSks1N25vR3BlS09IQXVsRUlBZkxiUzV3aUF4QktpSFIzZEtyUFkzUVJLdzkK",
+      "endpoints": [
+        "https://api.voxtype.net/api/update/{{target}}/{{arch}}/{{current_version}}"
+      ]
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "resources/sensevoice": "sensevoice/"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -95,6 +95,22 @@ export async function setAutoStart(enabled: boolean): Promise<void> {
   return invoke('set_auto_start', { enabled })
 }
 
+// Local STT model status (bundled model: loading → ready/failed, no download step)
+export interface LocalModelStatus {
+  status: 'loading' | 'ready' | 'failed'
+  message: string
+  elapsedSecs: number
+  cacheExists: boolean
+}
+
+export async function getLocalModelStatus(): Promise<LocalModelStatus> {
+  return invoke('get_local_model_status')
+}
+
+export async function resetLocalModel(): Promise<void> {
+  return invoke('reset_local_model')
+}
+
 // Onboarding persistence via tauri-plugin-store
 export async function loadOnboardingCompleted(): Promise<boolean> {
   try {

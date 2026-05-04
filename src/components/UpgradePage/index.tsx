@@ -4,7 +4,7 @@ import { Check, Crown, Loader2, Shield, Zap, Clock, X, QrCode } from 'lucide-rea
 import { QRCodeSVG } from 'qrcode.react'
 import { useAuthStore } from '../../stores/authStore'
 import { PRO_PLANS, type PlanPeriod } from '../../lib/constants'
-import { createPayOrder, checkPayStatus } from '../../lib/api'
+import { createPayOrder, checkPayStatus, getProductInfo, type ServerPricing } from '../../lib/api'
 import { useRoute } from '../../lib/router'
 
 const PLAN_LABELS: Record<PlanPeriod, string> = {
@@ -25,6 +25,8 @@ const PLAN_ICONS: Record<PlanPeriod, typeof Clock> = {
   yearly: Zap,
 }
 
+const PRICING_CACHE_KEY = 'voxtype_pricing_cache'
+
 export function UpgradePage() {
   const { user, plan, sttSecondsUsed, sttSecondsLimit, llmTokensUsed, llmTokensLimit } =
     useAuthStore()
@@ -36,18 +38,68 @@ export function UpgradePage() {
   const [payOrderId, setPayOrderId] = useState<string | null>(null)
   const [polling, setPolling] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
-  const [selectedPayType, setSelectedPayType] = useState<'wechat' | 'alipay'>('wechat')
   const [qrUrl, setQrUrl] = useState<string | null>(null)
+  const [serverPricing, setServerPricing] = useState<ServerPricing | null>(null)
 
   const isPro = plan === 'pro'
 
-  const handleSubscribe = async (payType: 'wechat' | 'alipay') => {
+  // Fetch pricing from server on mount (with localStorage fallback)
+  useEffect(() => {
+    // 1. Load cached pricing from localStorage first (show immediately)
+    try {
+      const cached = localStorage.getItem(PRICING_CACHE_KEY)
+      if (cached) {
+        const parsed: ServerPricing = JSON.parse(cached)
+        // Validate structure before using
+        if (parsed.monthly && parsed.quarterly && parsed.yearly) {
+          console.log('[Pricing] Loaded from cache:', parsed)
+          setServerPricing(parsed)
+        }
+      }
+    } catch {
+      // Corrupted cache, ignore
+    }
+
+    // 2. Fetch fresh pricing from server
+    getProductInfo()
+      .then((info) => {
+        console.log('[Pricing] Server response:', info)
+        // Server returns { code, data: { pricing: {...} } }
+        if (info.data?.pricing) {
+          console.log('[Pricing] Setting server pricing:', info.data.pricing)
+          setServerPricing(info.data.pricing)
+          // Cache to localStorage for offline/offline fallback
+          try {
+            localStorage.setItem(PRICING_CACHE_KEY, JSON.stringify(info.data.pricing))
+          } catch {
+            // Storage full or unavailable, ignore
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('[Pricing] Failed to fetch:', err)
+        // Silently fail — serverPricing is already set from cache (if any)
+        // If no cache exists, serverPricing stays null and getDisplayPrice falls back to PRO_PLANS
+      })
+  }, [])
+
+  // Resolve display price: server price takes priority, fallback to PRO_PLANS
+  const getDisplayPrice = (period: PlanPeriod): string => {
+    if (serverPricing && serverPricing[period]) {
+      return `¥${serverPricing[period].price}`
+    }
+    return PRO_PLANS[period].price
+  }
+
+  // Use resolved price for the selected plan
+  const resolvedPrice = getDisplayPrice(selectedPlan)
+
+  const handleSubscribe = async () => {
     if (!user) return
-    setSelectedPayType(payType)
     setLoading(true)
     setError(null)
     try {
-      const result = await createPayOrder(selectedPlan, payType)
+      const result = await createPayOrder(selectedPlan, 'wechat')
       if (result.code === 0 && result.data?.qr_url) {
         setPayOrderId(result.data.order_id)
         setQrUrl(result.data.qr_url)
@@ -105,14 +157,16 @@ export function UpgradePage() {
 
   return (
     <div className="max-w-[520px] mx-auto py-6 px-5 text-[13px]">
-      {/* Header with gradient */}
+      {/* Header */}
       <div className="text-center mb-6">
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 mb-3">
           <Crown size={24} className="text-white" />
         </div>
-        <h1 className="text-[22px] font-bold text-text-primary mb-1">升级到 Pro</h1>
+        <h1 className="text-[22px] font-bold text-text-primary mb-1">
+          {isPro ? '管理 Pro 订阅' : '升级到 Pro'}
+        </h1>
         <p className="text-text-secondary text-[13px]">
-          解锁全部功能，语音输入体验再升级
+          {isPro ? '续费以延长会员有效期' : '解锁全部功能，语音输入体验再升级'}
         </p>
       </div>
 
@@ -127,7 +181,7 @@ export function UpgradePage() {
         </span>
       </div>
 
-      {/* Pro quota progress */}
+      {/* Pro quota progress — only shown when user is Pro */}
       {isPro && (
         <div className="border border-border rounded-xl overflow-hidden mb-5">
           <div className="px-4 py-2.5 bg-gradient-to-r from-amber-500/5 to-orange-500/5 border-b border-border">
@@ -154,112 +208,91 @@ export function UpgradePage() {
         </div>
       )}
 
-      {/* Plan selection cards */}
-      {!isPro && (
-        <div className="grid grid-cols-3 gap-2.5 mb-5">
-          {(['monthly', 'quarterly', 'yearly'] as PlanPeriod[]).map((p) => {
-            const pd = PRO_PLANS[p]
-            const PlanIcon = PLAN_ICONS[p]
-            const isSelected = selectedPlan === p
-            return (
-              <button
-                key={p}
-                onClick={() => setSelectedPlan(p)}
-                className={`relative rounded-xl border-2 p-3 cursor-pointer transition-all text-left ${
-                  isSelected
-                    ? 'border-accent bg-accent/5 shadow-sm'
-                    : 'border-border bg-transparent hover:border-accent/30 hover:bg-bg-secondary/50'
-                }`}
-              >
-                {'save' in pd && pd.save && (
-                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-green-500 text-white text-[9px] font-medium px-1.5 py-0.5 rounded-full">
-                    {pd.save}
-                  </span>
-                )}
-                <PlanIcon
-                  size={18}
-                  className={isSelected ? 'text-accent mb-1.5' : 'text-text-tertiary mb-1.5'}
-                />
-                <p className={`text-[11px] mb-1 ${isSelected ? 'text-text-primary font-medium' : 'text-text-secondary'}`}>
-                  {PLAN_LABELS[p]}
-                </p>
-                <p className={`text-[18px] font-bold leading-tight ${isSelected ? 'text-accent' : 'text-text-primary'}`}>
-                  {pd.price}
-                </p>
-                <p className="text-[11px] text-text-tertiary mt-0.5">
-                  {pd.period}
-                </p>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Selected plan detail */}
-      {!isPro && (
-        <div className="border border-border rounded-xl overflow-hidden mb-5">
-          <div className="px-4 py-3 bg-bg-secondary/30 border-b border-border">
-            <div className="flex items-center gap-2">
-              <span className="text-[13px] font-medium text-text-primary">
-                {PLAN_LABELS[selectedPlan]}方案
-              </span>
-              <span className="text-[11px] text-text-tertiary">· {PLAN_DESCRIPTIONS[selectedPlan]}</span>
-            </div>
-          </div>
-          <div className="px-4 py-2.5">
-            {planData.features.map((f, i) => (
-              <div key={i} className="flex items-center gap-2 py-1.5">
-                <Check size={13} className="text-green-500 shrink-0" />
-                <span className="text-text-secondary">
-                  {f.label}
-                  {f.detail && (
-                    <span className="text-text-tertiary ml-1">— {f.detail}</span>
-                  )}
+      {/* Plan selection cards — always visible (Free users see upgrade options, Pro users see renewal options) */}
+      <div className="grid grid-cols-3 gap-2.5 mb-5">
+        {(['monthly', 'quarterly', 'yearly'] as PlanPeriod[]).map((p) => {
+          const pd = PRO_PLANS[p]
+          const PlanIcon = PLAN_ICONS[p]
+          const isSelected = selectedPlan === p
+          return (
+            <button
+              key={p}
+              onClick={() => setSelectedPlan(p)}
+              className={`relative rounded-xl border-2 p-3 cursor-pointer transition-all text-left ${
+                isSelected
+                  ? 'border-accent bg-accent/5 shadow-sm'
+                  : 'border-border bg-transparent hover:border-accent/30 hover:bg-bg-secondary/50'
+              }`}
+            >
+              {'save' in pd && pd.save && (
+                <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-green-500 text-white text-[9px] font-medium px-1.5 py-0.5 rounded-full">
+                  {pd.save}
                 </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+              )}
+              <PlanIcon
+                size={18}
+                className={isSelected ? 'text-accent mb-1.5' : 'text-text-tertiary mb-1.5'}
+              />
+              <p className={`text-[11px] mb-1 ${isSelected ? 'text-text-primary font-medium' : 'text-text-secondary'}`}>
+                {PLAN_LABELS[p]}
+              </p>
+              <p className={`text-[18px] font-bold leading-tight ${isSelected ? 'text-accent' : 'text-text-primary'}`}>
+                {getDisplayPrice(p)}
+              </p>
+              <p className="text-[11px] text-text-tertiary mt-0.5">
+                {pd.period}
+              </p>
+            </button>
+          )
+        })}
+      </div>
 
-      {/* Action buttons / Pro thank you */}
-      {isPro ? (
-        <div className="text-center py-4">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-green-500/10 mb-2">
-            <Crown size={18} className="text-amber-500" />
+      {/* Selected plan detail — always visible */}
+      <div className="border border-border rounded-xl overflow-hidden mb-5">
+        <div className="px-4 py-3 bg-bg-secondary/30 border-b border-border">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-medium text-text-primary">
+              {PLAN_LABELS[selectedPlan]}方案
+            </span>
+            <span className="text-[11px] text-text-tertiary">· {PLAN_DESCRIPTIONS[selectedPlan]}</span>
           </div>
-          <p className="text-text-secondary text-[13px]">
-            {t('upgrade.thankYou', '感谢你的支持！')}
-          </p>
-          <p className="text-text-tertiary text-[12px] mt-1">
-            {plan === 'pro' && useAuthStore.getState().subscriptionEnd
-              ? `有效期至 ${new Date(useAuthStore.getState().subscriptionEnd!).toLocaleDateString('zh-CN')}`
-              : ''}
-          </p>
         </div>
-      ) : !user ? (
+        <div className="px-4 py-2.5">
+          {planData.features.map((f, i) => (
+            <div key={i} className="flex items-center gap-2 py-1.5">
+              <Check size={13} className="text-green-500 shrink-0" />
+              <span className="text-text-secondary">
+                {f.label}
+                {f.detail && (
+                  <span className="text-text-tertiary ml-1">— {f.detail}</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Action button: Pro users see "续费", Free users see "升级" */}
+      {!user ? (
         <p className="text-text-tertiary text-[12px] text-center py-3">
           {t('upgrade.signInFirst', '请先登录后再订阅')}
         </p>
       ) : (
-        <div className="space-y-2">
-          <button
-            onClick={() => handleSubscribe('wechat')}
-            disabled={loading}
-            className="w-full py-2.5 rounded-xl bg-[#07C160] text-white text-[13px] font-medium cursor-pointer border-none hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <span className="text-[15px]">微</span>}
-            {loading ? '创建订单中...' : `微信支付 · ${planData.price}`}
-          </button>
-          <button
-            onClick={() => handleSubscribe('alipay')}
-            disabled={loading}
-            className="w-full py-2.5 rounded-xl bg-[#1677FF] text-white text-[13px] font-medium cursor-pointer border-none hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <span className="text-[15px]">支</span>}
-            {loading ? '创建订单中...' : `支付宝 · ${planData.price}`}
-          </button>
-        </div>
+        <button
+          onClick={handleSubscribe}
+          disabled={loading}
+          className="w-full py-2.5 rounded-xl bg-[#07C160] text-white text-[13px] font-medium cursor-pointer border-none hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : null}
+          {loading ? '创建订单中...' : `${isPro ? '续费' : '升级'} · ${resolvedPrice}`}
+        </button>
+      )}
+
+      {/* Pro expiry info */}
+      {isPro && useAuthStore.getState().subscriptionEnd && (
+        <p className="text-text-tertiary text-[12px] text-center mt-3">
+          当前会员有效期至 {new Date(useAuthStore.getState().subscriptionEnd!).toLocaleDateString('zh-CN')}
+        </p>
       )}
 
       {error && (
@@ -273,18 +306,11 @@ export function UpgradePage() {
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    selectedPayType === 'wechat' ? 'bg-[#07C160]/10' : 'bg-[#1677FF]/10'
-                  }`}
-                >
-                  <QrCode
-                    size={16}
-                    className={selectedPayType === 'wechat' ? 'text-[#07C160]' : 'text-[#1677FF]'}
-                  />
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#07C160]/10">
+                  <QrCode size={16} className="text-[#07C160]" />
                 </div>
                 <span className="text-[14px] font-medium text-text-primary">
-                  扫码支付
+                  微信扫码支付
                 </span>
               </div>
               <button
@@ -314,7 +340,7 @@ export function UpgradePage() {
               {/* Scan tip */}
               <div className="text-center mb-4">
                 <p className="text-[13px] font-medium text-text-primary mb-1">
-                  请使用微信或支付宝扫码支付
+                  请使用微信扫码支付
                 </p>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/5 border border-accent/20">
                   <Loader2 size={12} className="animate-spin text-accent" />
@@ -341,7 +367,7 @@ export function UpgradePage() {
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
                   <span className="text-text-secondary text-[12px]">支付金额</span>
-                  <span className="text-[18px] font-bold text-accent">{planData.price}</span>
+                  <span className="text-[18px] font-bold text-accent">{resolvedPrice}</span>
                 </div>
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
@@ -365,7 +391,7 @@ export function UpgradePage() {
             </div>
             <h2 className="text-[18px] font-bold text-text-primary mb-1">支付成功</h2>
             <p className="text-text-secondary text-[13px] mb-1">
-              已开通 {PLAN_LABELS[selectedPlan]} Pro
+              已{isPro ? '续费' : '开通'} {PLAN_LABELS[selectedPlan]} Pro
             </p>
             <p className="text-text-tertiary text-[12px]">
               正在跳转...

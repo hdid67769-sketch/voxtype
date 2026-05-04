@@ -2,28 +2,8 @@ import { create } from 'zustand'
 
 export type PipelineState = 'idle' | 'recording' | 'transcribing' | 'polishing' | 'outputting'
 
-export type SttProvider =
-  | 'deepgram'
-  | 'assemblyai'
-  | 'glm-asr'
-  | 'openai-whisper'
-  | 'groq-whisper'
-  | 'siliconflow'
-  | 'qwen3-asr'
-  | 'cloud'
-export type LlmProvider =
-  | 'zhipu'
-  | 'deepseek'
-  | 'siliconflow'
-  | 'openai'
-  | 'gemini'
-  | 'moonshot'
-  | 'qwen'
-  | 'groq'
-  | 'claude'
-  | 'ollama'
-  | 'openrouter'
-  | 'cloud'
+export type SttProvider = 'local-sensevoice'
+export type LlmProvider = 'cloud'
 export type OutputMode = 'keyboard' | 'clipboard'
 export type HotkeyMode = 'hold' | 'toggle'
 export type Theme = 'light' | 'dark' | 'system'
@@ -150,13 +130,13 @@ interface AppState {
 }
 
 const defaultConfig: AppConfig = {
-  stt_provider: 'glm-asr',
+  stt_provider: 'local-sensevoice',
   stt_api_key: '',
   stt_language: 'multi',
-  llm_provider: 'openrouter',
+  llm_provider: 'cloud',
   llm_api_key: '',
-  llm_model: 'google/gemini-2.5-flash',
-  llm_base_url: 'https://openrouter.ai/api/v1',
+  llm_model: 'default',
+  llm_base_url: 'https://api.voxtype.net/api/proxy',
   polish_enabled: true,
   translate_enabled: false,
   target_lang: 'en',
