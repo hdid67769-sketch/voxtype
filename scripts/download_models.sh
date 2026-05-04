@@ -9,7 +9,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_TARGET="${SCRIPT_DIR}/../src-tauri/resources/sensevoice"
+DEFAULT_TARGET="${SCRIPT_DIR}/../src-tauri/sensevoice"
 TARGET_DIR="${1:-$DEFAULT_TARGET}"
 VAD_DIR="${TARGET_DIR}/vad"
 
