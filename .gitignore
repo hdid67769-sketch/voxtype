@@ -20,8 +20,12 @@ dist-ssr
 .env.*
 src-tauri/updater.key
 src-tauri/updater.key.bak
+src-tauri/updater.key.pub
 src-tauri/updater.key.pub.bak
+src-tauri/updater-new.key
+src-tauri/updater-new.key.pub
 src-tauri/resources/
+src-tauri/sensevoice/
 .workbuddy/
 
 # Editor directories and files

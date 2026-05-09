@@ -35,9 +35,9 @@ impl TextOutput for ClipboardOutput {
             std::thread::sleep(std::time::Duration::from_millis(CLIPBOARD_SETTLE_MS));
 
             // On macOS: trigger Cmd+V via osascript (AppleScript).
-            // This avoids the Accessibility permission requirement that enigo's
-            // CGEventPost needs. The apple-events entitlement is already declared.
-            // On Windows/Linux: use enigo's SendInput which needs no special permissions.
+            // On Windows: use keybd_event directly — enigo's Key::Unicode goes
+            // through VkKeyScanW which is intercepted by the active IME.
+            // On Linux: use enigo's SendInput.
             #[cfg(target_os = "macos")]
             {
                 let status = std::process::Command::new("osascript")
@@ -54,7 +54,20 @@ impl TextOutput for ClipboardOutput {
                 }
             }
 
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "windows")]
+            {
+                use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+                    keybd_event, KEYEVENTF_KEYUP, VK_CONTROL, VK_V,
+                };
+                unsafe {
+                    keybd_event(VK_CONTROL, 0, 0, 0);
+                    keybd_event(VK_V, 0, 0, 0);
+                    keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0);
+                    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
+                }
+            }
+
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             {
                 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
                 let mut enigo = Enigo::new(&Settings::default())
