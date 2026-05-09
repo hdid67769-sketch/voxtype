@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoxType - AI 语音输入法</title>
+  <meta name="description" content="VoxType 是一款桌面端 AI 语音输入工具。按住快捷键说话，AI 自动识别并润色，输出干净可用的文字。说完即得，微调即发。" />
+  <style>
+    /* ========== Reset & Base ========== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      color: #1d2939; background: #fff; line-height: 1.6; -webkit-font-smoothing: antialiased;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: #155EEF; text-decoration: none; transition: color .2s; }
+    a:hover { color: #0e42d2; }
+
+    /* ========== Container ========== */
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+    /* ========== Navbar ========== */
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(255,255,255,.92); backdrop-filter: blur(12px); border-bottom: 1px solid #e4e7ec;
+      height: 60px; display: flex; align-items: center;
+    }
+    .navbar .container { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+    .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; color: #101828; }
+    .nav-brand img { width: 32px; height: 32px; border-radius: 8px; }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a { color: #475467; font-size: .9rem; font-weight: 500; }
+    .nav-links a:hover { color: #155EEF; }
+    .nav-cta {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #155EEF; color: #fff !important; padding: 8px 18px; border-radius: 8px;
+      font-weight: 600; font-size: .85rem; transition: background .2s;
+    }
+    .nav-cta:hover { background: #0e42d2; }
+    .nav-cta svg { width: 16px; height: 16px; }
+    .mobile-toggle { display: none; background: none; border: none; cursor: pointer; padding: 4px; position: relative; width: 36px; height: 36px; }
+    .mobile-toggle svg { width: 24px; height: 24px; color: #344054; transition: all .3s; position: absolute; top: 6px; left: 6px; }
+    .mobile-toggle .icon-close { opacity: 0; transform: rotate(-90deg); }
+    .mobile-toggle.active .icon-menu { opacity: 0; transform: rotate(90deg); }
+    .mobile-toggle.active .icon-close { opacity: 1; transform: rotate(0); }
+
+    /* ========== Hero ========== */
+    .hero {
+      padding: 140px 0 80px; text-align: center;
+      background: linear-gradient(180deg, #f9fafb 0%, #fff 100%);
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #eff8ff; color: #155EEF; border: 1px solid #bfdbfe;
+      padding: 6px 16px; border-radius: 100px; font-size: .8rem; font-weight: 600;
+      margin-bottom: 24px;
+    }
+    .hero h1 {
+      font-size: 3.2rem; font-weight: 800; line-height: 1.2; color: #101828;
+      margin-bottom: 20px; letter-spacing: -.02em;
+    }
+    .hero h1 span { color: #155EEF; }
+    .hero p {
+      font-size: 1.15rem; color: #667085; max-width: 600px; margin: 0 auto 36px;
+      line-height: 1.7;
+    }
+    .hero-buttons { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #155EEF; color: #fff; padding: 14px 28px; border-radius: 12px;
+      font-weight: 600; font-size: 1rem; border: none; cursor: pointer; transition: all .2s;
+      text-decoration: none;
+    }
+    .btn-primary:hover { background: #0e42d2; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(21,94,239,.3); color: #fff; }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #fff; color: #344054; padding: 14px 28px; border-radius: 12px;
+      font-weight: 600; font-size: 1rem; border: 1px solid #d0d5dd; cursor: pointer;
+      transition: all .2s; text-decoration: none;
+    }
+    .btn-secondary:hover { border-color: #98a2b3; background: #f9fafb; color: #101828; }
+    .btn-primary svg, .btn-secondary svg { width: 20px; height: 20px; }
+
+    /* ========== Demo ========== */
+    .demo-section { padding: 60px 0 80px; text-align: center; }
+    .demo-section h2 { font-size: 1.6rem; font-weight: 700; color: #101828; margin-bottom: 12px; }
+    .demo-section p { color: #667085; margin-bottom: 32px; }
+    .demo-gif {
+      margin: 0 auto; border-radius: 16px; border: 1px solid #e4e7ec;
+      box-shadow: 0 8px 40px rgba(0,0,0,.08); max-width: 720px;
+    }
+
+    /* ========== Section common ========== */
+    .section { padding: 80px 0; }
+    .section-alt { background: #f9fafb; }
+    .section-header { text-align: center; margin-bottom: 48px; }
+    .section-header h2 { font-size: 2rem; font-weight: 700; color: #101828; margin-bottom: 12px; }
+    .section-header p { color: #667085; font-size: 1.05rem; max-width: 560px; margin: 0 auto; }
+
+    /* ========== Features ========== */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    .feature-card {
+      background: #fff; border: 1px solid #e4e7ec; border-radius: 16px;
+      padding: 28px; transition: all .25s;
+    }
+    .feature-card:hover { border-color: #bfdbfe; box-shadow: 0 4px 20px rgba(21,94,239,.08); transform: translateY(-2px); }
+    .feature-icon {
+      width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center;
+      justify-content: center; margin-bottom: 16px; font-size: 1.4rem;
+    }
+    .feature-icon.blue { background: #eff8ff; }
+    .feature-icon.green { background: #ecfdf3; }
+    .feature-icon.purple { background: #f5f3ff; }
+    .feature-icon.orange { background: #fff7ed; }
+    .feature-icon.red { background: #fef2f2; }
+    .feature-icon.cyan { background: #ecfeff; }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 650; color: #101828; margin-bottom: 8px; }
+    .feature-card p { color: #667085; font-size: .9rem; line-height: 1.6; }
+
+    /* ========== How it works ========== */
+    .steps { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+    .step {
+      flex: 1; min-width: 220px; max-width: 300px; text-align: center; position: relative;
+    }
+    .step-number {
+      width: 48px; height: 48px; border-radius: 50%; background: #155EEF; color: #fff;
+      font-weight: 700; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .step-arrow {
+      display: flex; align-items: center; justify-content: center; color: #d0d5dd;
+      font-size: 1.5rem; padding-top: 10px;
+    }
+    .step h3 { font-size: 1.05rem; font-weight: 650; margin-bottom: 8px; }
+    .step p { color: #667085; font-size: .9rem; }
+
+    /* ========== Compare ========== */
+    .compare-table-wrapper { overflow-x: auto; }
+    .compare-table {
+      width: 100%; border-collapse: collapse; background: #fff;
+      border: 1px solid #e4e7ec; border-radius: 16px; overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+    .compare-table th, .compare-table td { padding: 14px 20px; text-align: left; font-size: .9rem; }
+    .compare-table th {
+      background: #f9fafb; font-weight: 600; color: #344054;
+      border-bottom: 1px solid #e4e7ec;
+    }
+    .compare-table td { color: #475467; border-bottom: 1px solid #f2f4f7; }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table .highlight-row { background: #eff8ff; }
+    .compare-table .highlight-row td { color: #155EEF; font-weight: 600; }
+    .check { color: #12B76A; font-weight: 700; }
+    .cross { color: #98a2b3; }
+
+    /* ========== Tutorial ========== */
+    .tutorial-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+    .tutorial-block { margin-bottom: 48px; }
+    .tutorial-block:last-child { margin-bottom: 0; }
+    .tutorial-block h3 {
+      font-size: 1.2rem; font-weight: 700; color: #101828; margin-bottom: 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .tutorial-block h3 .badge {
+      display: inline-block; background: #155EEF; color: #fff; font-size: .7rem;
+      font-weight: 700; padding: 3px 8px; border-radius: 6px; text-transform: uppercase;
+    }
+    .tutorial-steps { display: flex; flex-direction: column; gap: 16px; }
+    .t-step {
+      display: flex; gap: 14px; padding: 16px; background: #fff;
+      border: 1px solid #e4e7ec; border-radius: 12px;
+    }
+    .t-step-num {
+      width: 28px; height: 28px; min-width: 28px; border-radius: 50%;
+      background: #f2f4f7; color: #667085; font-weight: 700; font-size: .8rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .t-step-content h4 { font-size: .92rem; font-weight: 600; color: #101828; margin-bottom: 4px; }
+    .t-step-content p { font-size: .85rem; color: #667085; line-height: 1.6; }
+    .t-step-content code {
+      display: inline; background: #f2f4f7; padding: 2px 6px; border-radius: 4px;
+      font-size: .82rem; color: #c4364a; font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .tutorial-img {
+      margin-top: 24px; border-radius: 12px; border: 1px solid #e4e7ec;
+      box-shadow: 0 2px 12px rgba(0,0,0,.06);
+    }
+
+    /* ========== Download ========== */
+    .download-section { padding: 80px 0; text-align: center; background: #101828; color: #fff; }
+    .download-section h2 { font-size: 2rem; font-weight: 700; margin-bottom: 12px; }
+    .download-section p { color: #98a2b3; margin-bottom: 36px; font-size: 1.05rem; }
+    .download-buttons { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+    .dl-btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: #155EEF; color: #fff; padding: 14px 28px; border-radius: 12px;
+      font-weight: 600; font-size: .95rem; border: none; cursor: pointer;
+      transition: all .2s; text-decoration: none;
+    }
+    .dl-btn:hover { background: #4a7dff; transform: translateY(-1px); color: #fff; }
+    .dl-btn svg { width: 20px; height: 20px; }
+    .dl-note { margin-top: 20px; font-size: .82rem; color: #667085; }
+
+    /* ========== Footer ========== */
+    .footer {
+      padding: 40px 0; border-top: 1px solid #e4e7ec; text-align: center;
+    }
+    .footer-links { display: flex; justify-content: center; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+    .footer-links a { color: #667085; font-size: .85rem; }
+    .footer-links a:hover { color: #155EEF; }
+    .footer p { color: #98a2b3; font-size: .8rem; }
+
+    /* ========== Responsive ========== */
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 2.2rem; }
+      .hero p { font-size: 1rem; }
+      .hero-badge { font-size: .72rem; padding: 5px 12px; }
+      .features-grid { grid-template-columns: 1fr; gap: 16px; }
+      .tutorial-grid { grid-template-columns: 1fr; gap: 32px; }
+      .steps { flex-direction: column; align-items: center; }
+      .step-arrow { transform: rotate(90deg); }
+      .nav-links {
+        display: none; position: absolute; top: 60px; left: 0; right: 0;
+        background: #fff; flex-direction: column; padding: 20px 24px;
+        border-bottom: 1px solid #e4e7ec; gap: 16px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.06);
+      }
+      .nav-links.show { display: flex; }
+      .nav-links a { font-size: .95rem; padding: 4px 0; }
+      .mobile-toggle { display: block; }
+      .compare-table th, .compare-table td { padding: 10px 12px; font-size: .8rem; }
+      .section { padding: 56px 0; }
+      .section-header h2 { font-size: 1.6rem; }
+      .section-header p { font-size: .92rem; }
+
+      /* Pricing mobile */
+      .pricing-grid { grid-template-columns: 1fr; gap: 20px; max-width: 400px; }
+      .pricing-card { padding: 28px 24px; }
+      .pricing-card .price { font-size: 2.4rem; }
+      .pricing-toggle { margin-bottom: 28px; gap: 4px; }
+      .pricing-toggle span { font-size: .8rem; padding: 5px 10px; }
+
+      /* FAQ mobile */
+      .faq-question { padding: 16px 18px; font-size: .9rem; }
+      .faq-answer { padding: 0 18px 16px; font-size: .85rem; }
+
+      /* Buttons mobile */
+      .btn-primary, .btn-secondary { padding: 12px 22px; font-size: .9rem; }
+      .hero-buttons { gap: 10px; }
+
+      /* Demo gif */
+      .demo-gif { border-radius: 12px; }
+    }
+
+    /* ========== Pricing ========== */
+    .pricing-toggle {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      margin-bottom: 40px;
+    }
+    .pricing-toggle span { font-size: .9rem; color: #667085; cursor: pointer; padding: 6px 14px; border-radius: 8px; transition: all .2s; }
+    .pricing-toggle span.active { color: #fff; background: #155EEF; font-weight: 600; }
+    .pricing-toggle span:hover:not(.active) { color: #101828; background: #f2f4f7; }
+    .toggle-save {
+      display: inline-block; background: #ecfdf3; color: #12B76A;
+      font-size: .75rem; font-weight: 700; padding: 2px 10px;
+      border-radius: 100px; margin-left: 4px;
+    }
+    .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 800px; margin: 0 auto; }
+    .pricing-card {
+      background: #fff; border: 1px solid #e4e7ec; border-radius: 20px;
+      padding: 36px 32px; transition: all .3s; position: relative;
+    }
+    .pricing-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,.08); }
+    .pricing-card.pro {
+      border-color: #155EEF; border-width: 2px;
+      background: linear-gradient(180deg, #eff8ff 0%, #fff 40%);
+    }
+    .pricing-card .badge-popular {
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: #155EEF; color: #fff; font-size: .75rem; font-weight: 700;
+      padding: 4px 16px; border-radius: 100px; white-space: nowrap;
+    }
+    .pricing-card h3 { font-size: 1.2rem; font-weight: 700; color: #101828; margin-bottom: 8px; }
+    .pricing-card .price {
+      font-size: 2.8rem; font-weight: 800; color: #101828; margin-bottom: 4px;
+      display: flex; align-items: baseline; gap: 2px;
+    }
+    .pricing-card .price .currency { font-size: 1.4rem; font-weight: 700; }
+    .pricing-card .price .period { font-size: .9rem; color: #667085; font-weight: 400; }
+    .pricing-card .price-desc { font-size: .85rem; color: #667085; margin-bottom: 28px; }
+    .pricing-features { list-style: none; margin-bottom: 32px; display: flex; flex-direction: column; gap: 12px; }
+    .pricing-features li {
+      display: flex; align-items: center; gap: 10px;
+      font-size: .9rem; color: #344054;
+    }
+    .pricing-features li svg { width: 18px; height: 18px; min-width: 18px; }
+    .pricing-features li .check-icon { color: #12B76A; }
+    .pricing-features li .pro-icon { color: #155EEF; }
+    .pricing-features li.disabled { color: #98a2b3; }
+    .pricing-features li.disabled svg { color: #d0d5dd; }
+    .pricing-cta {
+      display: block; text-align: center; padding: 14px 24px; border-radius: 12px;
+      font-weight: 600; font-size: .95rem; transition: all .2s; cursor: pointer;
+      text-decoration: none;
+    }
+    .pricing-cta.primary { background: #155EEF; color: #fff; }
+    .pricing-cta.primary:hover { background: #0e42d2; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(21,94,239,.3); color: #fff; }
+    .pricing-cta.secondary { background: #f2f4f7; color: #344054; border: 1px solid #e4e7ec; }
+    .pricing-cta.secondary:hover { background: #e4e7ec; color: #101828; }
+
+    /* ========== FAQ ========== */
+    .faq-list { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .faq-item {
+      border: 1px solid #e4e7ec; border-radius: 12px; overflow: hidden;
+      background: #fff; transition: all .2s;
+    }
+    .faq-item:hover { border-color: #bfdbfe; }
+    details.faq-item { summary { list-style: none; } }
+    details.faq-item summary::-webkit-details-marker { display: none; }
+    .faq-question {
+      padding: 20px 24px; cursor: pointer; font-weight: 600; font-size: .95rem;
+      color: #101828; display: flex; align-items: center; justify-content: space-between;
+      user-select: none;
+    }
+    .faq-question:hover { color: #155EEF; }
+    .faq-question .faq-arrow {
+      width: 20px; height: 20px; min-width: 20px; transition: transform .3s;
+      color: #98a2b3;
+    }
+    details.faq-item[open] .faq-arrow { transform: rotate(180deg); color: #155EEF; }
+    details.faq-item[open] { border-color: #bfdbfe; }
+    .faq-answer {
+      padding: 0 24px 20px; font-size: .9rem; color: #667085; line-height: 1.7;
+    }
+    .faq-answer a { color: #155EEF; }
+
+    /* ========== Pro Badge ========== */
+    .pro-badge {
+      position: absolute; top: 12px; right: 12px;
+      background: linear-gradient(135deg, #155EEF, #4a7dff);
+      color: #fff; font-size: .65rem; font-weight: 800; padding: 3px 10px;
+      border-radius: 6px; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .feature-card { position: relative; }
+
+    /* ========== Animations ========== */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeInUp .6s ease-out both; }
+    .fade-in-d1 { animation-delay: .1s; }
+    .fade-in-d2 { animation-delay: .2s; }
+    .fade-in-d3 { animation-delay: .3s; }
+  </style>
+</head>
+<body>
+
+<!-- ===== Navbar ===== -->
+<nav class="navbar">
+  <div class="container">
+    <a href="#" class="nav-brand">
+      <img src="images/logo.png" alt="VoxType Logo" />
+      VoxType
+    </a>
+    <div class="nav-links">
+      <a href="#features">功能特点</a>
+      <a href="#pricing">定价</a>
+      <a href="#faq">FAQ</a>
+      <a href="#tutorial">使用教程</a>
+      <a href="#compare">产品对比</a>
+      <a href="#download" class="nav-cta">免费下载</a>
+    </div>
+    <button class="mobile-toggle" id="mobile-toggle" onclick="toggleMobileMenu()" aria-label="菜单">
+      <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+</nav>
+
+<!-- ===== Hero ===== -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge fade-in">免费 · 本地运行 · 隐私优先</div>
+    <h1 class="fade-in fade-in-d1">用<span>语音</span>输入<br/>随时随地</h1>
+    <p class="fade-in fade-in-d2">VoxType 是一款桌面端 AI 语音输入工具。按住快捷键说话，AI 自动识别并润色，输出干净可用的文字。</p>
+    <div class="hero-buttons fade-in fade-in-d3">
+      <a href="#download" class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        免费下载
+      </a>
+      <a href="#features" class="btn-secondary">
+        了解更多
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Demo ===== -->
+<section class="demo-section">
+  <div class="container">
+    <h2>看它如何工作</h2>
+    <p>按住快捷键，说你想说的。松手，润色后的文字直接出现在光标处。</p>
+    <img src="images/voice-flow-demo.gif" alt="VoxType 语音输入演示" class="demo-gif" />
+  </div>
+</section>
+
+<!-- ===== Features ===== -->
+<section class="section section-alt" id="features">
+  <div class="container">
+    <div class="section-header">
+      <h2>功能特点</h2>
+      <p>从语音到文字，从草稿到成品，每一步都为你优化</p>
+    </div>
+    <div class="features-grid">
+      <!-- Feature 1 -->
+      <div class="feature-card">
+        <div class="feature-icon blue">🎙️</div>
+        <h3>多种语音识别服务</h3>
+        <p>支持 Deepgram、AssemblyAI、Whisper、Groq、GLM-ASR、SiliconFlow 等 6+ STT 服务商，自由选择最优方案。</p>
+      </div>
+      <!-- Feature 2 -->
+      <div class="feature-card">
+        <span class="pro-badge">Pro</span>
+        <div class="feature-icon green">✨</div>
+        <h3>AI 智能润色</h3>
+        <p>自动去除口水词、填充词，修正语法，整理重复内容，输出干净可用的文字草稿。Pro 版使用专属润色模型，效果更优。支持 OpenAI、DeepSeek、Claude、Gemini、Ollama 等多种 LLM。</p>
+      </div>
+      <!-- Feature 3 -->
+      <div class="feature-card">
+        <div class="feature-icon purple">⌨️</div>
+        <h3>全局热键输入</h3>
+        <p>按住快捷键即可说话，松手自动输出。在任何应用中无缝使用——文档、聊天、浏览器，无需切换窗口。</p>
+      </div>
+      <!-- Feature 4 -->
+      <div class="feature-card">
+        <div class="feature-icon orange">🔒</div>
+        <h3>本地识别 · 隐私优先</h3>
+        <p>采用 Local SenseVoice 本地语音识别，音频数据在本地处理，不出本机。Pro 版云服务的传输也经过加密保护。</p>
+      </div>
+      <!-- Feature 5 -->
+      <div class="feature-card">
+        <div class="feature-icon red">🌐</div>
+        <h3>翻译模式</h3>
+        <p>支持语音输入直接翻译为目标语言，跨语言沟通无障碍。</p>
+      </div>
+      <!-- Feature 6 -->
+      <div class="feature-card">
+        <span class="pro-badge">Pro</span>
+        <div class="feature-icon cyan">📊</div>
+        <h3>历史记录与多设备同步</h3>
+        <p>自动保存识别记录，随时回顾。自定义词典确保专业术语和专有名词准确识别。Pro 版支持多设备同步，数据无缝流转。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== How it works ===== -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <h2>三步完成语音输入</h2>
+      <p>无需配置，装上就能用</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">1</div>
+        <h3>按住说话</h3>
+        <p>按住全局快捷键（默认 Ctrl+/），对着麦克风说出你想输入的内容</p>
+      </div>
+      <div class="step-arrow">→</div>
+      <div class="step">
+        <div class="step-number">2</div>
+        <h3>AI 转录</h3>
+        <p>松开快捷键，语音立即被识别为文字，准确快速</p>
+      </div>
+      <div class="step-arrow">→</div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <h3>润色输出</h3>
+        <p>AI 自动去除口水词、整理语序，将干净的文字直接输入到光标处</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Tutorial ===== -->
+<section class="section section-alt" id="tutorial">
+  <div class="container">
+    <div class="section-header">
+      <h2>快速上手 VoxType</h2>
+      <p>简单三步，开始使用语音输入</p>
+    </div>
+    <div class="tutorial-grid">
+      <!-- Left: 快速开始 -->
+      <div>
+        <div class="tutorial-block">
+          <h3>
+            <span class="badge">开始使用</span>
+            三步开始语音输入
+          </h3>
+          <div class="tutorial-steps">
+            <div class="t-step">
+              <div class="t-step-num">1</div>
+              <div class="t-step-content">
+                <h4>下载并安装 VoxType</h4>
+                <p>前往 <a href="#download">下载页面</a>，下载对应平台安装包，拖入 Applications 即可</p>
+              </div>
+            </div>
+            <div class="t-step">
+              <div class="t-step-num">2</div>
+              <div class="t-step-content">
+                <h4>授予麦克风权限</h4>
+                <p>首次启动会请求麦克风权限，请在系统设置中允许 VoxType 访问麦克风</p>
+              </div>
+            </div>
+            <div class="t-step">
+              <div class="t-step-num">3</div>
+              <div class="t-step-content">
+                <h4>按住快捷键说话</h4>
+                <p>默认快捷键 <code>Ctrl + /</code>，按住说话，松手自动输出文字到光标处</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Right: 升级 Pro -->
+      <div>
+        <div class="tutorial-block">
+          <h3>
+            <span class="badge">Pro</span>
+            升级到 Pro 版
+          </h3>
+          <div class="tutorial-steps">
+            <div class="t-step">
+              <div class="t-step-num">1</div>
+              <div class="t-step-content">
+                <h4>打开升级页面</h4>
+                <p>点击应用内「升级到 Pro」，或访问设置页面中的升级入口</p>
+              </div>
+            </div>
+            <div class="t-step">
+              <div class="t-step-num">2</div>
+              <div class="t-step-content">
+                <h4>选择方案并支付</h4>
+                <p>支持月付、季付、年付三种方案，微信支付即可</p>
+              </div>
+            </div>
+            <div class="t-step">
+              <div class="t-step-num">3</div>
+              <div class="t-step-content">
+                <h4>立即享受 Pro 功能</h4>
+                <p>支付成功后自动激活，专属润色模型和免配置语音识别立即生效</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Settings Screenshot -->
+    <div style="text-align:center; margin-top: 40px;">
+      <img src="images/app-settings.png" alt="VoxType 设置界面" class="tutorial-img" style="max-width: 600px; margin: 0 auto;" />
+    </div>
+  </div>
+</section>
+
+<!-- ===== Compare ===== -->
+<section class="section" id="compare">
+  <div class="container">
+    <div class="section-header">
+      <h2>为什么选择 VoxType？</h2>
+      <p>和常见的语音输入方案对比</p>
+    </div>
+    <div class="compare-table-wrapper">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>功能</th>
+            <th>VoxType</th>
+            <th>macOS 听写</th>
+            <th>Windows 语音</th>
+            <th>Whisper Desktop</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="highlight-row">
+            <td>免费使用</td>
+            <td class="check">✓</td>
+            <td class="check">✓</td>
+            <td class="check">✓</td>
+            <td class="check">✓</td>
+          </tr>
+          <tr class="highlight-row">
+            <td>AI 润色</td>
+            <td class="check">✓</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+          </tr>
+          <tr>
+            <td>多 STT 服务商</td>
+            <td class="check">✓ 6+</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗ 仅 Whisper</td>
+          </tr>
+          <tr class="highlight-row">
+            <td>多 LLM 支持</td>
+            <td class="check">✓ 5+</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+          </tr>
+          <tr>
+            <td>隐私 / 离线可用</td>
+            <td class="check">✓ 本地运行</td>
+            <td class="check">✓</td>
+            <td class="cross">✗</td>
+            <td class="check">✓</td>
+          </tr>
+          <tr>
+            <td>翻译模式</td>
+            <td class="check">✓</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+          </tr>
+          <tr class="highlight-row">
+            <td>自定义词典</td>
+            <td class="check">✓</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+          </tr>
+          <tr>
+            <td>跨平台</td>
+            <td class="check">✓ Win/Mac</td>
+            <td class="cross">✗ 仅 Mac</td>
+            <td class="cross">✗ 仅 Win</td>
+            <td class="check">✓ Win/Mac</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Pricing ===== -->
+<section class="section section-alt" id="pricing">
+  <div class="container">
+    <div class="section-header">
+      <h2>选择适合你的方案</h2>
+      <p>新用户注册即享 10 天 Pro 版免费试用，到期后自动降级为 Free 版</p>
+    </div>
+    <div class="pricing-toggle">
+      <span id="toggle-monthly" class="active" onclick="switchPricing('monthly')">月付</span>
+      <span id="toggle-quarterly" onclick="switchPricing('quarterly')">季付</span>
+      <span id="toggle-yearly" onclick="switchPricing('yearly')">年付<span class="toggle-save">省 33%</span></span>
+    </div>
+    <div class="pricing-grid">
+      <!-- Free -->
+      <div class="pricing-card">
+        <h3>Free</h3>
+        <div class="price"><span class="currency">¥</span><span>0</span></div>
+        <div class="price-desc">新用户试用 10 天后自动降级</div>
+        <ul class="pricing-features">
+          <li>
+            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            多种 STT 语音识别服务
+          </li>
+          <li>
+            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            全局热键输入
+          </li>
+          <li>
+            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            翻译模式
+          </li>
+          <li>
+            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            自定义词典与历史记录
+          </li>
+          <li class="disabled">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            专属润色模型
+          </li>
+          <li class="disabled">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            优先技术支持
+          </li>
+          <li class="disabled">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            多设备同步
+          </li>
+        </ul>
+        <a href="#download" class="pricing-cta secondary">免费下载</a>
+      </div>
+      <!-- Pro -->
+      <div class="pricing-card pro">
+        <span class="badge-popular">✨ 推荐</span>
+        <h3>Pro</h3>
+        <div class="price"><span class="currency">¥</span><span id="pro-price">9</span><span class="period" id="pro-period">/月</span></div>
+        <div class="price-desc">开箱即用，无需任何配置</div>
+        <ul class="pricing-features">
+          <li>
+            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Free 全部功能
+          </li>
+          <li>
+            <svg class="pro-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <strong>专属润色模型</strong>（效果更优）
+          </li>
+          <li>
+            <svg class="pro-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <strong>免配置 STT</strong>（开箱即用）
+          </li>
+          <li>
+            <svg class="pro-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <strong>优先技术支持</strong>
+          </li>
+          <li>
+            <svg class="pro-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <strong>多设备同步</strong>（即将上线）
+          </li>
+        </ul>
+        <a href="#" class="pricing-cta primary" id="pro-cta">立即订阅 · ¥9/月</a>
+      </div>
+    </div>
+    <p style="text-align:center;margin-top:24px;font-size:.82rem;color:#98a2b3;">支持微信支付 · 到期自动降级为 Free 版 · 手动续费不自动扣款</p>
+  </div>
+</section>
+
+<!-- ===== App Preview ===== -->
+<section class="section section-alt">
+  <div class="container" style="text-align:center;">
+    <h2 style="font-size:2rem;font-weight:700;margin-bottom:12px;">简洁直观的界面</h2>
+    <p style="color:#667085;margin-bottom:32px;">设置简单，上手零门槛</p>
+    <img src="images/app-main-light.png" alt="VoxType 主界面" style="max-width:800px;margin:0 auto;border-radius:16px;border:1px solid #e4e7ec;box-shadow:0 8px 40px rgba(0,0,0,.08);" />
+  </div>
+</section>
+
+<!-- ===== FAQ ===== -->
+<section class="section section-alt" id="faq">
+  <div class="container">
+    <div class="section-header">
+      <h2>常见问题</h2>
+      <p>关于 VoxType 的常见疑问，也许能帮到你</p>
+    </div>
+    <div class="faq-list">
+      <details class="faq-item">
+        <summary class="faq-question">
+          VoxType 和 macOS 听写 / Windows 语音有什么区别？
+          <svg class="faq-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </summary>
+        <div class="faq-answer">
+          系统自带语音输入只能做基础的语音转文字，而 VoxType 在此基础上增加了 <strong>AI 润色</strong>——自动去除口水词、填充词，整理重复内容，输出干净的文字草稿。此外，VoxType 支持多种 STT/LLM 服务商自由切换，功能远超系统自带方案。
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">
+          免费版有什么限制？
+          <svg class="faq-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </summary>
+        <div class="faq-answer">
+          新用户注册后可免费使用 Pro 版全部功能 10 天，无需支付即可体验完整能力。10 天试用期结束后自动降级为 Free 版，Free 版包含语音识别、翻译模式、自定义词典等核心功能，满足日常语音输入需求。
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">
+          Pro 版和免费版的区别是什么？
+          <svg class="faq-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </summary>
+        <div class="faq-answer">
+          Pro 版提供 <strong>开箱即用</strong> 的体验：内置语音识别和专属润色模型，无需申请 Key 或配置任何参数。此外，Pro 用户享有优先技术支持和即将推出的多设备同步功能。
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">
+          我的语音数据安全吗？
+          <svg class="faq-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </summary>
+        <div class="faq-answer">
+          VoxType 采用本地语音识别，音频数据在本地处理，不出本机。Pro 版云服务的传输也经过加密保护，不存储任何用户语音数据。
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">
+          支持哪些平台？
+          <svg class="faq-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </summary>
+        <div class="faq-answer">
+          目前支持 <strong>macOS</strong> 和 <strong>Windows</strong>。VoxType 基于 Tauri 框架构建，安装包体积小、性能好、内存占用低。前往 <a href="#download">下载页面</a>获取对应平台版本。
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">
+          如何支付？支持哪些支付方式？
+          <svg class="faq-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </summary>
+        <div class="faq-answer">
+          Pro 版支持 <strong>微信支付</strong>，通过虎皮椒支付平台安全收款。订阅到期后自动降级为 Free 版，不会自动扣费。
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">
+          不想用了怎么办？可以退款吗？
+          <svg class="faq-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </summary>
+        <div class="faq-answer">
+          VoxType 采用手动续费模式，到期后自动降级为 Free 版，不产生任何后续费用。如果你在购买后 7 天内觉得不满意，可以联系客服 18913645319 申请退款。随时可以继续使用。
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">
+          新用户有免费试用吗？
+          <svg class="faq-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </summary>
+        <div class="faq-answer">
+          有的！新用户注册后可免费使用 Pro 版全部功能 10 天，无需绑定支付方式，直接体验完整能力。10 天试用期结束后自动降级为 Free 版，可继续使用基础功能。
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Download CTA ===== -->
+<section class="download-section" id="download">
+  <div class="container">
+    <h2>开始使用 VoxType</h2>
+    <p>免费下载，永久免费</p>
+    <div class="download-buttons">
+      <a href="https://voxtypedown-1357339751.cos.ap-shanghai.myqcloud.com/VoxType_0.1.1_aarch64.dmg" class="dl-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        下载 macOS 版本
+      </a>
+      <a href="https://voxtypedown-1357339751.cos.ap-shanghai.myqcloud.com/VoxType_0.1.1_x64-setup.exe" class="dl-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        下载 Windows 版本
+      </a>
+    </div>
+    <p class="dl-note" style="color:#667085;margin-top:24px;">支持 macOS 和 Windows · 安装包小于 1G · 极速下载</p>
+  </div>
+</section>
+
+<!-- ===== Footer ===== -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-links">
+      <a href="#">问题反馈</a>
+      <a href="#">使用文档</a>
+      <a href="#">隐私政策</a>
+      <a href="#">用户协议</a>
+    </div>
+    <p>VoxType · AI 语音输入法 · 用语音，更自由</p>
+  </div>
+</footer>
+
+</body>
+<script>
+const pricingData = {
+  monthly:   { price: '9', period: '/月', cta: '立即订阅 · ¥9/月' },
+  quarterly: { price: '25', period: '/季', cta: '立即订阅 · ¥25/季' },
+  yearly:    { price: '89', period: '/年', cta: '立即订阅 · ¥89/年' }
+};
+
+function switchPricing(plan) {
+  const price = document.getElementById('pro-price');
+  const period = document.getElementById('pro-period');
+  const cta = document.getElementById('pro-cta');
+  const monthly = document.getElementById('toggle-monthly');
+  const quarterly = document.getElementById('toggle-quarterly');
+  const yearly = document.getElementById('toggle-yearly');
+
+  [monthly, quarterly, yearly].forEach(el => el.classList.remove('active'));
+  if (plan === 'monthly') monthly.classList.add('active');
+  if (plan === 'quarterly') quarterly.classList.add('active');
+  if (plan === 'yearly') yearly.classList.add('active');
+
+  const d = pricingData[plan];
+  price.textContent = d.price;
+  period.textContent = d.period;
+  cta.textContent = d.cta;
+}
+
+function toggleMobileMenu() {
+  const nav = document.querySelector('.nav-links');
+  const btn = document.getElementById('mobile-toggle');
+  nav.classList.toggle('show');
+  btn.classList.toggle('active');
+}
+</script>
+</html>
