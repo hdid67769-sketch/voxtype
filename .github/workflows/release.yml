@@ -22,7 +22,9 @@ jobs:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             args: ''
-          # macOS builds are done locally — only Windows uses CI to save Actions quota
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            args: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
