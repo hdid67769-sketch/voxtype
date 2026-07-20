@@ -46,7 +46,7 @@ jobs:
       - run: npm ci
 
       - name: Restore cached SenseVoice models
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: cache-models
         with:
           path: src-tauri/sensevoice
@@ -59,7 +59,7 @@ jobs:
 
       - name: Save SenseVoice models to cache
         if: steps.cache-models.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: src-tauri/sensevoice
           key: sensevoice-models-20260504
